@@ -1,74 +1,80 @@
 pipeline {
     agent any
     
-    tools{
-        
+    tools {
         jdk 'jdk17'
     }
     
-    environment {
-        
-        SCANNER_HOME= tool 'sonar-scanner'
+      environment {
+        SCANNER_HOME=tool 'sonar-scanner'
     }
 
     stages {
-        stage('Git Checkout ') {
+        stage('Git Checkout') {
             steps {
-                git 'https://github.com/jaiswaladi246/DotNet-DEMO.git'
+                git 'https://github.com/shivu24-abylle/DotNet-DEMO.git'
             }
         }
         
-        stage('OWASP Dependency Check') {
+        stage('OWASP Dependency') {
             steps {
-                dependencyCheck additionalArguments: ' --scan ./ ', odcInstallation: 'DC'
-                    dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                dependencyCheck additionalArguments: '--scan ./ ', odcInstallation: 'DC'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
         }
-        
-        stage('Trivy FS SCan') {
+        stage('Trivy FS') {
             steps {
-                sh "trivy fs ."
+               sh "trivy fs ."
             }
         }
-        
-        stage('Sonarqube Analysis') {
+        stage(" Sonarqube Analysis "){
+            steps{
+                 withSonarQubeEnv('sonar') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Dotnet-demo \
+                    -Dsonar.projectKey=Dotnet-demo '''
+                    
+                 }
+            }
+        }
+        stage('Docker build and tag') {
             steps {
-                
-                withSonarQubeEnv('sonar'){
-                  sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=dotnet-demo \
-                    -Dsonar.projectKey=dotnet-demo ''' 
+               script{
+                   withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                    sh "make image"
+                    }
                }
-                
-               
             }
         }
-        
-        stage('Docker Build & Tag') {
+        stage("Trivy Image Scan "){
+            steps{
+                //sh "trivy image sushantkapare1717/dotnet-demoapp "
+                sh "trivy image shivakumar24041993/dotnet-demoapp "
+            }
+        } 
+         
+        stage('Build and Push') {
             steps {
-                script{
-                    withDockerRegistry(credentialsId: 'docker-cred') {
-                        sh "make image"
+                script {
+                    // Build your Docker image here
+
+                    // Log in to Docker Hub or your private registry
+                    docker.withRegistry('https://registry.hub.docker.com', 'docker-cred') {
+                        // Push the Docker image
+                        docker.image('shivakumar24041993/dotnet-demoapp').push()
+                        
                     }
                 }
             }
         }
-        
-        stage('Docker Push') {
+        stage('Deloy to container ') {
             steps {
-                script{
-                    withDockerRegistry(credentialsId: 'docker-cred') {
-                        sh "make push"
+               script{
+                   withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                    sh "docker run -d -p 5000:5000  shivakumar24041993/dotnet-demoapp "
                     }
-                }
+               }
             }
         }
-        
-        stage('Docker Deploy') {
-            steps {
-                sh "docker run -d -p 5000:5000 adijaiswal/dotnet-demoapp"
-            }
-        }
-        
         
     }
 }
